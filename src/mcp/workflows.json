@@ -1,0 +1,90 @@
+{
+  "workflows": [
+    {
+      "id": "social-post-workflow",
+      "name": "Social Media Posting Workflow",
+      "description": "Generate and post content to social platforms",
+      "steps": [
+        {
+          "id": "generate-content",
+          "tool": "llm-gateway",
+          "action": "generate",
+          "parameters": {
+            "prompt": "{{ workflow.input.prompt }}",
+            "platform": "{{ workflow.input.platform }}",
+            "max_tokens": 500
+          }
+        },
+        {
+          "id": "post-content",
+          "tool": "puppeteer-runner",
+          "action": "post",
+          "parameters": {
+            "content": "{{ steps.generate-content.output }}",
+            "platforms": "{{ workflow.input.platforms }}",
+            "credentials": "{{ workflow.input.credentials }}"
+          }
+        }
+      ],
+      "triggers": [
+        {
+          "type": "schedule",
+          "cron": "0 9 * * *"
+        },
+        {
+          "type": "webhook",
+          "path": "/trigger/social-post"
+        }
+      ]
+    },
+    {
+      "id": "multi-platform-campaign",
+      "name": "Multi-Platform Campaign",
+      "description": "Post different content to multiple platforms simultaneously",
+      "steps": [
+        {
+          "id": "generate-twitter-content",
+          "tool": "llm-gateway",
+          "action": "generate",
+          "parameters": {
+            "prompt": "{{ workflow.input.prompt }}",
+            "platform": "twitter",
+            "max_tokens": 280
+          }
+        },
+        {
+          "id": "generate-linkedin-content",
+          "tool": "llm-gateway",
+          "action": "generate",
+          "parameters": {
+            "prompt": "{{ workflow.input.prompt }}",
+            "platform": "linkedin",
+            "max_tokens": 1000
+          }
+        },
+        {
+          "id": "post-to-twitter",
+          "tool": "puppeteer-runner",
+          "action": "post",
+          "parameters": {
+            "content": "{{ steps.generate-twitter-content.output }}",
+            "platforms": ["twitter"],
+            "credentials": "{{ workflow.input.credentials }}"
+          },
+          "parallel": true
+        },
+        {
+          "id": "post-to-linkedin",
+          "tool": "puppeteer-runner",
+          "action": "post",
+          "parameters": {
+            "content": "{{ steps.generate-linkedin-content.output }}",
+            "platforms": ["linkedin"],
+            "credentials": "{{ workflow.input.credentials }}"
+          },
+          "parallel": true
+        }
+      ]
+    }
+  ]
+}
