@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # LLM Gateway - Routes requests to various AI providers
+  llm-gateway:
+    build:
+      context: ../src/llm
+      dockerfile: ../../docker/llm-gateway/Dockerfile
+    container_name: autometa-llm-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      # Groq Configuration
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.1-70b-versatile}
+
+      # Gemini Configuration
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+
+      # OpenRouter Configuration
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-anthropic/claude-3.5-sonnet}
+
+      # LM Studio Configuration (local)
+      - LMSTUDIO_URL=${LMSTUDIO_URL:-http://host.docker.internal:1234/v1}
+      - LMSTUDIO_MODEL=${LMSTUDIO_MODEL:-local-model}
+    networks:
+      - autometa-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Puppeteer Runner - Browser automation for social posting
+  puppeteer-runner:
+    build:
+      context: ../src/automation
+      dockerfile: ../../docker/puppeteer/Dockerfile
+    container_name: autometa-puppeteer
+    ports:
+      - "9222:9222"  # Remote debugging
+      - "3000:3000"  # API endpoint
+    environment:
+      - LLM_GATEWAY_URL=http://llm-gateway:8000
+      - MCP_SERVER_URL=http://mcp-server:3003
+      - NODE_ENV=production
+    volumes:
+      - puppeteer-data:/app/data
+    networks:
+      - autometa-network
+    depends_on:
+      - llm-gateway
+      - mcp-server
+    restart: unless-stopped
+    shm_size: '2gb'  # Increased shared memory for Chrome
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MCP Server - Tool orchestration and workflow management
+  mcp-server:
+    image: ghcr.io/docker/mcp-server:latest
+    container_name: autometa-mcp-server
+    ports:
+      - "3003:3003"
+    environment:
+      - MCP_PORT=3003
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ../src/mcp:/app/config
+      - mcp-data:/app/data
+    networks:
+      - autometa-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  autometa-network:
+    driver: bridge
+    name: autometa-network
+
+volumes:
+  puppeteer-data:
+    name: autometa-puppeteer-data
+  mcp-data:
+    name: autometa-mcp-data

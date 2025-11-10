@@ -1,0 +1,107 @@
+{
+  "tools": [
+    {
+      "name": "llm-gateway",
+      "description": "AI content generation gateway with multi-provider support",
+      "endpoint": "http://llm-gateway:8000",
+      "actions": [
+        {
+          "name": "generate",
+          "method": "POST",
+          "path": "/generate",
+          "parameters": {
+            "prompt": {
+              "type": "string",
+              "required": true,
+              "description": "Content generation prompt"
+            },
+            "platform": {
+              "type": "string",
+              "required": false,
+              "default": "twitter",
+              "enum": ["twitter", "linkedin", "facebook"]
+            },
+            "max_tokens": {
+              "type": "integer",
+              "required": false,
+              "default": 500
+            },
+            "temperature": {
+              "type": "number",
+              "required": false,
+              "default": 0.7
+            },
+            "provider": {
+              "type": "string",
+              "required": false,
+              "enum": ["groq", "gemini", "openrouter", "lmstudio"]
+            }
+          }
+        },
+        {
+          "name": "health",
+          "method": "GET",
+          "path": "/health",
+          "parameters": {}
+        }
+      ]
+    },
+    {
+      "name": "puppeteer-runner",
+      "description": "Browser automation for social media posting",
+      "endpoint": "http://puppeteer-runner:3000",
+      "actions": [
+        {
+          "name": "post",
+          "method": "POST",
+          "path": "/run",
+          "parameters": {
+            "jobId": {
+              "type": "string",
+              "required": true,
+              "description": "Unique job identifier"
+            },
+            "platforms": {
+              "type": "array",
+              "required": true,
+              "items": {
+                "type": "string",
+                "enum": ["twitter", "linkedin"]
+              }
+            },
+            "prompt": {
+              "type": "string",
+              "required": true
+            },
+            "credentials": {
+              "type": "object",
+              "required": true,
+              "properties": {
+                "twitter": {
+                  "type": "object",
+                  "properties": {
+                    "username": {"type": "string"},
+                    "password": {"type": "string"}
+                  }
+                },
+                "linkedin": {
+                  "type": "object",
+                  "properties": {
+                    "username": {"type": "string"},
+                    "password": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "health",
+          "method": "GET",
+          "path": "/health",
+          "parameters": {}
+        }
+      ]
+    }
+  ]
+}
