@@ -1,22 +1,27 @@
-// LLM Service - Handles communication with multiple LLM providers
+// LLM Service - Handles communication with backend LLM Gateway
+import { apiClient } from './api-client';
 
 interface LLMConfig {
-  groqApiKey: string;
-  geminiApiKey: string;
+  // Configuration is now handled by backend via environment variables
+  // This is kept for compatibility
+  groqApiKey?: string;
+  geminiApiKey?: string;
   openaiApiKey?: string;
   lmStudioEndpoint?: string;
 }
 
 interface GenerateRequest {
   prompt: string;
-  provider?: 'groq' | 'gemini' | 'openrouter' | 'openai' | 'lmstudio';
+  provider?: 'groq' | 'gemini' | 'openrouter' | 'lmstudio';
   maxTokens?: number;
   temperature?: number;
+  platform?: string;
 }
 
 interface GenerateResponse {
   content: string;
   provider: string;
+  model?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -25,145 +30,64 @@ interface GenerateResponse {
 }
 
 class LLMService {
-  private config: LLMConfig = {
-    groqApiKey: '',
-    geminiApiKey: '',
-  };
-
-  private providerPriority: Array<'groq' | 'gemini' | 'openrouter' | 'openai' | 'lmstudio'> = [
-    'groq',
-  ];
+  private config: LLMConfig = {};
 
   configure(config: Partial<LLMConfig>) {
     this.config = { ...this.config, ...config };
+    console.log('LLM config updated (backend handles actual API keys)');
   }
 
+  /**
+   * Generate content using the backend LLM gateway
+   * The gateway handles provider selection, fallback, and API key management
+   */
   async generate(request: GenerateRequest): Promise<GenerateResponse> {
-    const provider = request.provider || this.providerPriority[0];
-
     try {
-      switch (provider) {
-        case 'groq':
-          return await this.generateWithGroq(request);
-        case 'gemini':
-          return await this.generateWithGemini(request);
-        default:
-          throw new Error(`Unknown provider: ${provider}`);
-      }
+      const response = await apiClient.llmGenerate({
+        prompt: request.prompt,
+        platform: request.platform,
+        max_tokens: request.maxTokens,
+        temperature: request.temperature,
+        provider: request.provider,
+      });
+
+      return response as GenerateResponse;
     } catch (error) {
-      console.error(`Error with ${provider}:`, error);
-      
-      // Auto-fallback to next available provider
-      const nextProvider = this.getNextProvider(provider);
-      if (nextProvider) {
-        console.log(`Falling back to ${nextProvider}`);
-        return await this.generate({ ...request, provider: nextProvider });
-      }
-      
+      console.error('LLM generation error:', error);
       throw error;
     }
   }
 
-  private async generateWithGroq(request: GenerateRequest): Promise<GenerateResponse> {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.groqApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          {
-            role: 'user',
-            content: request.prompt,
-          },
-        ],
-        max_tokens: request.maxTokens || 1000,
-        temperature: request.temperature || 0.7,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Groq API error: ${error}`);
+  /**
+   * Check health of backend LLM gateway and available providers
+   */
+  async checkHealth(): Promise<{
+    status: string;
+    providers: Record<string, boolean>;
+  }> {
+    try {
+      return (await apiClient.llmHealth()) as any;
+    } catch (error) {
+      console.error('LLM health check error:', error);
+      return {
+        status: 'disconnected',
+        providers: {},
+      };
     }
-
-    const data = await response.json();
-    
-    return {
-      content: data.choices[0].message.content,
-      provider: 'groq',
-      usage: {
-        promptTokens: data.usage?.prompt_tokens || 0,
-        completionTokens: data.usage?.completion_tokens || 0,
-        totalTokens: data.usage?.total_tokens || 0,
-      },
-    };
   }
 
-  private async generateWithGemini(request: GenerateRequest): Promise<GenerateResponse> {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${this.config.geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: request.prompt,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: request.temperature || 0.7,
-            maxOutputTokens: request.maxTokens || 1000,
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Gemini API error: ${error}`);
-    }
-
-    const data = await response.json();
-    
-    return {
-      content: data.candidates[0].content.parts[0].text,
-      provider: 'gemini',
-      usage: {
-        promptTokens: data.usageMetadata?.promptTokenCount || 0,
-        completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
-        totalTokens: data.usageMetadata?.totalTokenCount || 0,
-      },
-    };
-  }
-
-  private getNextProvider(currentProvider: string): string | null {
-    const currentIndex = this.providerPriority.indexOf(currentProvider as any);
-    if (currentIndex >= 0 && currentIndex < this.providerPriority.length - 1) {
-      return this.providerPriority[currentIndex + 1];
-    }
-    return null;
-  }
-
-  async testConnection(provider: 'groq' | 'gemini'): Promise<{ success: boolean; responseTime: number; error?: string }> {
+  async testConnection(
+    provider: 'groq' | 'gemini'
+  ): Promise<{ success: boolean; responseTime: number; error?: string }> {
     const startTime = Date.now();
-    
+
     try {
       await this.generate({
         prompt: 'Say "OK" if you can read this.',
         provider,
         maxTokens: 10,
       });
-      
+
       return {
         success: true,
         responseTime: Date.now() - startTime,
@@ -185,7 +109,8 @@ class LLMService {
   }): Promise<string> {
     const platformGuidelines = {
       twitter: 'Keep it under 280 characters. Be concise and engaging.',
-      linkedin: 'Professional tone, can be longer (up to 3000 chars). Focus on insights and value.',
+      linkedin:
+        'Professional tone, can be longer (up to 3000 chars). Focus on insights and value.',
     };
 
     const prompt = `Generate a ${context.tone || 'engaging'} social media post for ${context.platform}.
@@ -202,6 +127,7 @@ Generate only the post content, nothing else.`;
 
     const response = await this.generate({
       prompt,
+      platform: context.platform,
       temperature: 0.8,
       maxTokens: context.platform === 'twitter' ? 100 : 500,
     });
@@ -230,8 +156,8 @@ Generate ${count} new ideas:`;
     // Parse the response into an array
     const ideas = response.content
       .split('\n')
-      .filter(line => line.trim().match(/^\d+\./))
-      .map(line => line.replace(/^\d+\.\s*/, '').trim());
+      .filter((line) => line.trim().match(/^\d+\./))
+      .map((line) => line.replace(/^\d+\.\s*/, '').trim());
 
     return ideas;
   }

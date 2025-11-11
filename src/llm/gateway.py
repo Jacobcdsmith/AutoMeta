@@ -8,6 +8,7 @@ import os
 import httpx
 import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from enum import Enum
@@ -17,7 +18,16 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AutoMeta LLM Gateway")
+app = FastAPI(title="AutoMeta LLM Gateway", version="1.0.0")
+
+# Add CORS middleware for frontend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class Provider(str, Enum):
