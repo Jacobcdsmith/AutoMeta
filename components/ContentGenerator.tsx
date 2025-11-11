@@ -3,9 +3,10 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { Card } from './ui/card';
-import { Sparkles, Loader2, Copy, Twitter, Linkedin } from 'lucide-react';
+import { Sparkles, Loader2, Copy, Check, Twitter, Linkedin } from 'lucide-react';
 import { llmService } from '../services/llm-service';
-import { toast } from 'sonner@2.0.3';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
+import { toast } from 'sonner';
 
 interface ContentGeneratorProps {
   onGenerated?: (content: string) => void;
@@ -16,7 +17,10 @@ export function ContentGenerator({ onGenerated }: ContentGeneratorProps) {
   const [platform, setPlatform] = useState<'twitter' | 'linkedin'>('twitter');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<'groq' | 'gemini' | 'openrouter'>('groq');
+  const [selectedProvider, setSelectedProvider] = useState<'groq' | 'gemini' | 'openrouter'>(
+    'groq'
+  );
+  const { copy, copiedText } = useCopyToClipboard();
 
   const handleGenerate = async () => {
     if (!topic.trim() && !generatedContent) {
@@ -35,9 +39,9 @@ export function ContentGenerator({ onGenerated }: ContentGeneratorProps) {
 
       setGeneratedContent(content);
       onGenerated?.(content);
-      
+
       toast.success('Content generated!', {
-        description: `Using ${selectedProvider}`,
+        description: `Created with ${selectedProvider}`,
       });
     } catch (error) {
       toast.error('Failed to generate content', {
@@ -49,14 +53,15 @@ export function ContentGenerator({ onGenerated }: ContentGeneratorProps) {
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(generatedContent);
-    toast.success('Copied to clipboard');
+    copy(generatedContent, '📋 Content copied!');
   };
 
+  const isCopied = copiedText === generatedContent;
+
   return (
-    <Card className="p-6 space-y-6 bg-zinc-900/50 border-zinc-800">
+    <Card className="p-6 space-y-6 bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-colors">
       <div>
-        <h3 className="text-lg mb-2">Content Generator</h3>
+        <h3 className="text-lg font-semibold text-white mb-2">Content Generator</h3>
         <p className="text-sm text-zinc-400">Generate social media posts with AI</p>
       </div>
 
@@ -68,8 +73,14 @@ export function ContentGenerator({ onGenerated }: ContentGeneratorProps) {
             placeholder="e.g., AI automation in customer service, or leave blank for trending topics"
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
-            className="bg-zinc-900 border-zinc-800"
+            className="bg-zinc-900 border-zinc-800 focus:border-purple-500 transition-colors min-h-[80px]"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                handleGenerate();
+              }
+            }}
           />
+          <p className="text-xs text-zinc-500">Press Ctrl+Enter to generate</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -79,7 +90,11 @@ export function ContentGenerator({ onGenerated }: ContentGeneratorProps) {
               <Button
                 variant={platform === 'twitter' ? 'default' : 'outline'}
                 onClick={() => setPlatform('twitter')}
-                className="w-full"
+                className={`w-full transition-all ${
+                  platform === 'twitter'
+                    ? 'shadow-lg shadow-purple-500/20'
+                    : ''
+                }`}
               >
                 <Twitter className="w-4 h-4 mr-2" />
                 Twitter
@@ -87,7 +102,11 @@ export function ContentGenerator({ onGenerated }: ContentGeneratorProps) {
               <Button
                 variant={platform === 'linkedin' ? 'default' : 'outline'}
                 onClick={() => setPlatform('linkedin')}
-                className="w-full"
+                className={`w-full transition-all ${
+                  platform === 'linkedin'
+                    ? 'shadow-lg shadow-purple-500/20'
+                    : ''
+                }`}
               >
                 <Linkedin className="w-4 h-4 mr-2" />
                 LinkedIn
@@ -101,7 +120,7 @@ export function ContentGenerator({ onGenerated }: ContentGeneratorProps) {
               id="provider"
               value={selectedProvider}
               onChange={(e) => setSelectedProvider(e.target.value as any)}
-              className="w-full px-3 py-2 rounded-md border border-zinc-800 bg-zinc-900 text-zinc-100"
+              className="w-full px-3 py-2 rounded-md border border-zinc-800 bg-zinc-900 text-zinc-100 focus:border-purple-500 focus:outline-none transition-colors"
             >
               <option value="groq">Groq (Fastest)</option>
               <option value="openrouter">OpenRouter</option>
@@ -110,10 +129,10 @@ export function ContentGenerator({ onGenerated }: ContentGeneratorProps) {
           </div>
         </div>
 
-        <Button 
-          onClick={handleGenerate} 
+        <Button
+          onClick={handleGenerate}
           disabled={isGenerating}
-          className="w-full"
+          className="w-full transition-all hover:shadow-lg hover:shadow-purple-500/20"
         >
           {isGenerating ? (
             <>
@@ -129,20 +148,32 @@ export function ContentGenerator({ onGenerated }: ContentGeneratorProps) {
         </Button>
 
         {generatedContent && (
-          <div className="space-y-2">
+          <div className="space-y-2 animate-in fade-in duration-300">
             <div className="flex items-center justify-between">
               <Label>Generated Content</Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopy}
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copy
+              <Button variant="ghost" size="sm" onClick={handleCopy}>
+                {isCopied ? (
+                  <>
+                    <Check className="w-4 h-4 mr-2 text-green-500" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy
+                  </>
+                )}
               </Button>
             </div>
-            <div className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 min-h-[120px]">
-              <p className="text-sm text-zinc-100 whitespace-pre-wrap">{generatedContent}</p>
+            <div className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 min-h-[120px] hover:border-zinc-700 transition-colors">
+              <p className="text-sm text-zinc-100 whitespace-pre-wrap leading-relaxed">
+                {generatedContent}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-zinc-500">
+              <span>Generated for {platform}</span>
+              <span>•</span>
+              <span>{generatedContent.length} characters</span>
             </div>
           </div>
         )}
