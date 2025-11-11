@@ -184,11 +184,43 @@ async function runAutomation(config) {
 }
 
 /**
- * Health check server
+ * API Server with extended endpoints
  */
-function startHealthServer() {
+function startAPIServer() {
   const app = express();
   app.use(express.json());
+
+  // Enable CORS for frontend
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
+  let persistentBrowser = null;
+  let currentPage = null;
+
+  // Initialize persistent browser instance
+  async function getPersistentBrowser() {
+    if (!persistentBrowser) {
+      persistentBrowser = await initBrowser();
+    }
+    return persistentBrowser;
+  }
+
+  // Get or create current page
+  async function getCurrentPage() {
+    if (!currentPage) {
+      const browser = await getPersistentBrowser();
+      const pages = await browser.pages();
+      currentPage = pages.length > 0 ? pages[0] : await browser.newPage();
+    }
+    return currentPage;
+  }
 
   app.get('/health', (req, res) => {
     res.json({ status: 'healthy', service: 'puppeteer-runner' });
@@ -203,14 +235,95 @@ function startHealthServer() {
     }
   });
 
+  // Navigate to URL
+  app.post('/navigate', async (req, res) => {
+    try {
+      const { url } = req.body;
+      const page = await getCurrentPage();
+      await page.goto(url, { waitUntil: 'networkidle0' });
+      res.json({ success: true, url });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Take screenshot
+  app.post('/screenshot', async (req, res) => {
+    try {
+      const page = await getCurrentPage();
+      const screenshot = await page.screenshot({
+        encoding: 'base64',
+        fullPage: false
+      });
+      res.json({ success: true, screenshot: `data:image/png;base64,${screenshot}` });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get current page state
+  app.get('/state', async (req, res) => {
+    try {
+      const page = await getCurrentPage();
+      const url = page.url();
+      const title = await page.title();
+
+      res.json({
+        url,
+        title,
+        isLoading: false
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Execute script on page
+  app.post('/execute', async (req, res) => {
+    try {
+      const { script } = req.body;
+      const page = await getCurrentPage();
+      const result = await page.evaluate(script);
+      res.json({ success: true, result });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Interact with element
+  app.post('/interact', async (req, res) => {
+    try {
+      const { selector, action, value } = req.body;
+      const page = await getCurrentPage();
+
+      switch (action) {
+        case 'click':
+          await page.click(selector);
+          break;
+        case 'type':
+          await page.type(selector, value);
+          break;
+        case 'select':
+          await page.select(selector, value);
+          break;
+        default:
+          throw new Error(`Unknown action: ${action}`);
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   const port = 3000;
-  app.listen(port, () => {
-    console.log(`Puppeteer runner listening on port ${port}`);
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`Puppeteer API server listening on port ${port}`);
   });
 }
 
 // Start server
-startHealthServer();
+startAPIServer();
 
 // Export for testing
 module.exports = {

@@ -1,6 +1,31 @@
 version: '3.8'
 
 services:
+  # Frontend - React Application
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile
+    container_name: autometa-frontend
+    ports:
+      - "3001:80"
+    environment:
+      - VITE_LLM_GATEWAY_URL=http://llm-gateway:8000
+      - VITE_PUPPETEER_URL=http://puppeteer-runner:3000
+      - VITE_MCP_URL=http://mcp-server:3003
+    networks:
+      - autometa-network
+    depends_on:
+      - llm-gateway
+      - puppeteer-runner
+      - mcp-server
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # LLM Gateway - Routes requests to various AI providers
   llm-gateway:
     build:
@@ -57,7 +82,7 @@ services:
     restart: unless-stopped
     shm_size: '2gb'  # Increased shared memory for Chrome
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -78,7 +103,7 @@ services:
       - autometa-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3003/health"]
       interval: 30s
       timeout: 10s
       retries: 3
